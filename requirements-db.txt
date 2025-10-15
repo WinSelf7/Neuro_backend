@@ -1,0 +1,7 @@
+# Additional dependencies for PostgreSQL database support
+sqlalchemy==2.0.44
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+python-dotenv==1.1.1

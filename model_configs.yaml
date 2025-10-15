@@ -1,0 +1,25 @@
+device: cpu # cuda / cpu / mps (using `transformers` as backend)
+weights:
+  doclayout_yolo: Structure/doclayout_yolo_docstructbench_imgsz1280_2501.pt # or Structure/layout_zh.pt
+  PP-DocLayout_plus-L: Structure/PP-DocLayout_plus-L
+  layoutreader: Relation
+models_dir: model_weight
+layout_config: 
+  model: PP-DocLayout_plus-L # PP-DocLayout_plus-L (MonkeyOCR-pro) / doclayout_yolo (MonkeyOCR)
+  reader:
+    name: layoutreader
+chat_config:
+  weight_path: model_weight/Recognition
+  backend: transformers # lmdeploy / vllm / transformers / api / lmdeploy_queue / vllm_queue
+  batch_size: 5 # active when using `transformers` as backend
+  # if using xxx_queue as backend
+  queue_config:
+    max_batch_size: 256 # maximum batch size for internal processing
+    queue_timeout: 1 # seconds to wait for batching requests
+    max_queue_size: 2000 # maximum requests in queue
+
+# Uncomment the following lines if use `api` as backend 
+api_config:
+  url: https://api.openai.com/v1
+  model_name: gpt-4.1
+  api_key: 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
