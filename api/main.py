@@ -12,7 +12,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from build_scorecard import load_course_reference, call_openai_extract, build_three_row_dataframe, build_eleven_row_dataframe, _is_all_tees
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from tempfile import gettempdir
@@ -171,7 +171,7 @@ async def smart_batch_model_call(images_and_questions_list, batch_func):
             results.append(result)
         return results
     
-async def run_scorecard_pipeline(md_path: str):
+def run_scorecard_pipeline(md_path: str):
     md_text = Path(md_path).read_text(encoding="utf-8", errors="ignore")
     course = load_course_reference(Path(COURSE_REFERENCE_PATH))
     extract = call_openai_extract(md_text)
@@ -252,12 +252,18 @@ async def root():
     return {"message": "MonkeyOCR API is running", "version": "1.0.0"}
 
 @app.post("/parse", response_model=ParseResponse)
-async def parse_document(file: UploadFile = File(...)):
+async def parse_document(
+    file: UploadFile = File(...),
+    quick: bool = Query(False, description="If true, process only the first page for fast preview")
+):
     """Parse complete document (PDF or image)"""
 
-    await parse_document_internal(file, split_pages=False)
+    # Quick mode: split pages and limit to first page
+    if quick:
+        return await parse_document_internal(file, split_pages=True, max_pages=1)
+    return await parse_document_internal(file, split_pages=False)
 
-async def async_parse_file(input_file_path: str, output_dir: str, split_pages: bool = False):
+async def async_parse_file(input_file_path: str, output_dir: str, split_pages: bool = False, max_pages: Optional[int] = None):
     """
     Optimized async version of parse_file that breaks down processing into async chunks
     """
@@ -329,13 +335,17 @@ async def async_parse_file(input_file_path: str, output_dir: str, split_pages: b
         # For sync models, use lock
         async with model_lock:
             infer_result = await asyncio.get_event_loop().run_in_executor(None, run_inference_sync)
+
+    # If we have multiple pages and a limit, trim early for speed
+    if split_pages and isinstance(infer_result, list) and max_pages is not None:
+        infer_result = infer_result[:max_pages]
     
     parsing_time = time.time() - start_time
     logger.info(f"Parsing time: {parsing_time:.2f}s")
     
     # Process results asynchronously
     await process_inference_results_async(
-        infer_result, output_dir, safe_name, 
+        infer_result, output_dir, safe_name,
         local_image_dir, local_md_dir, image_dir, split_pages
     )
     
@@ -560,7 +570,7 @@ async def async_single_task_recognition(input_file_path: str, output_dir: str, t
     
     return local_md_dir
 
-async def parse_document_internal(file: UploadFile, split_pages: bool = False):
+async def parse_document_internal(file: UploadFile, split_pages: bool = False, max_pages: Optional[int] = None):
     """Internal function to parse document with optional page splitting"""
     try:
         if not monkey_ocr_model:
@@ -593,7 +603,7 @@ async def parse_document_internal(file: UploadFile, split_pages: bool = False):
             output_dir = tempfile.mkdtemp(prefix=f"monkeyocr_parse_{unique_suffix}_")
             
             # Use optimized async parse function
-            result_dir = await async_parse_file(temp_file_path, output_dir, split_pages)
+            result_dir = await async_parse_file(temp_file_path, output_dir, split_pages, max_pages)
             
             # List generated files
             files = []
@@ -628,10 +638,8 @@ async def parse_document_internal(file: UploadFile, split_pages: bool = False):
 
                         # 👉 Run scorecard pipeline here
                         extract, df = await asyncio.get_event_loop().run_in_executor(
-                            None, lambda: run_scorecard_pipeline(md_path)
+                            None, run_scorecard_pipeline, md_path
                         )
-                        # unwrap the tuple from the function
-                        extract, df = extract
                         df_json = df.values.tolist()   # convert DataFrame to list-of-lists for API
 
                     except Exception as e:

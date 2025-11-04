@@ -248,10 +248,19 @@ class MonkeyChat_transformers:
         logger.info(f"Max batch size: {self.max_batch_size}")
         
         try:
+            # Determine attention implementation: prefer Flash-Attn2 only if available
+            attn_impl = 'sdpa'
+            if self.device.startswith("cuda"):
+                try:
+                    import flash_attn  # type: ignore # noqa: F401
+                    attn_impl = 'flash_attention_2'
+                except Exception:
+                    attn_impl = 'sdpa'
+
             self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                         model_path,
-                        torch_dtype=torch.bfloat16 if bf16_supported else torch.float16,
-                        attn_implementation="flash_attention_2" if self.device.startswith("cuda") else 'sdpa',
+                        dtype=torch.bfloat16 if bf16_supported else torch.float16,
+                        attn_implementation=attn_impl,
                         device_map=self.device,
                     )
                 

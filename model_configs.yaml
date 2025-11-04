@@ -1,4 +1,4 @@
-device: cpu # cuda / cpu / mps (using `transformers` as backend)
+device: cuda # cuda / cpu / mps (using `transformers` as backend)
 weights:
   doclayout_yolo: Structure/doclayout_yolo_docstructbench_imgsz1280_2501.pt # or Structure/layout_zh.pt
   PP-DocLayout_plus-L: Structure/PP-DocLayout_plus-L
