@@ -14,17 +14,33 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 # Password hashing
 pwd_context = CryptContext(
     schemes=["bcrypt"],
-    deprecated="auto",
-    bcrypt__truncate_error= False  # Allow bcrypt to auto-truncate >72 bytes
+    deprecated="auto"
+    # bcrypt automatically truncates passwords longer than 72 bytes by default
 )
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        # If there's still an issue, manually truncate and try again
+        if len(plain_password.encode('utf-8')) > 72:
+            password_bytes = plain_password.encode('utf-8')[:72]
+            plain_password = password_bytes.decode('utf-8', errors='ignore')
+            return pwd_context.verify(plain_password, hashed_password)
+        raise e
 
 def get_password_hash(password: str) -> str:
     """Hash a password (bcrypt auto-truncates at 72 bytes)"""
-    return pwd_context.hash(password)
+    try:
+        return pwd_context.hash(password)
+    except Exception as e:
+        # If there's still an issue, manually truncate and try again
+        if len(password.encode('utf-8')) > 72:
+            password_bytes = password.encode('utf-8')[:72]
+            password = password_bytes.decode('utf-8', errors='ignore')
+            return pwd_context.hash(password)
+        raise e
 
 # Request/Response Models
 class SignupRequest(BaseModel):
